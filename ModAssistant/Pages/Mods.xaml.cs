@@ -250,11 +250,20 @@ namespace ModAssistant.Pages
             string InjectorPath = Path.Combine(App.BeatSaberInstallDirectory, "Beat Saber_Data", "Managed", "IPA.Injector.dll");
             if (!File.Exists(InjectorPath)) return;
 
+            // Bruh, https://stackoverflow.com/a/11350038
+            var versionInfo = FileVersionInfo.GetVersionInfo(InjectorPath);
+            string version = versionInfo.FileVersion;
             string InjectorHash = Utils.CalculateMD5(InjectorPath);
             foreach (Mod mod in AllModsList)
             {
                 if (mod.name.ToLowerInvariant() == "bsipa")
                 {
+                    // Using version instead of md5
+                    if (version == mod.version + ".0")
+                    {
+                        AddDetectedMod(mod);
+                        break;
+                    }
                     foreach (Mod.DownloadLink download in mod.downloads)
                     {
                         foreach (Mod.FileHashes fileHash in download.hashMd5)
@@ -457,7 +466,14 @@ namespace ModAssistant.Pages
             {
                 List<ZipArchiveEntry> files = new List<ZipArchiveEntry>(filesCount);
 
-                using (Stream stream = await DownloadMod(Utils.Constants.BeatModsURL + downloadLink))
+                // Easier to keep everything in one place. It should allow easy patching in future.
+                String link = Utils.Constants.BeatModsURL + downloadLink;
+                if (mod.name.ToLowerInvariant() == "bsipa")
+                {
+                    link = "https://github.com/alealexpro100/BeatSaber-IPA-Reloaded-NODRM/releases/download/" + mod.version + "/BSIPA-net472-x64.zip";
+                }
+
+                using (Stream stream = await DownloadMod(link))
                 using (ZipArchive archive = new ZipArchive(stream))
                 {
                     foreach (ZipArchiveEntry file in archive.Entries)
@@ -468,6 +484,7 @@ namespace ModAssistant.Pages
                             Directory.CreateDirectory(fileDirectory);
                         }
 
+                        // Why they veify hash sum for every file in archive???
                         if (!string.IsNullOrEmpty(file.Name))
                         {
                             foreach (Mod.DownloadLink download in mod.downloads)
@@ -476,6 +493,12 @@ namespace ModAssistant.Pages
                                 {
                                     using (Stream fileStream = file.Open())
                                     {
+                                        // Disabling it only for BSIPA (I am too lazy to add md5 checking)
+                                        if (mod.name.ToLowerInvariant() == "bsipa")
+                                        {
+                                            files.Add(file);
+                                            break;
+                                        }
                                         if (fileHash.hash == Utils.CalculateMD5FromStream(fileStream))
                                         {
                                             files.Add(file);
